@@ -83,8 +83,16 @@ const uint8_t ADXL345_ADDRESS = 0x53;
 const uint8_t MPU6050_ADDRESS = 0x69;
 
 // ==========================================
-// PWM BUZZER CHANNELS (ESP32 LEDC)
+// PWM BUZZER CHANNELS (ESP32 LEDC - Core v2 & v3 Compatible)
 // ==========================================
+#include <esp_arduino_version.h>
+
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+  #define USE_ESP32_CORE_V3 1
+#else
+  #define USE_ESP32_CORE_V3 0
+#endif
+
 const int BUZZER_PWM_CHANNEL = 0;
 const int BUZZER_PWM_FREQ    = 2800; // 2.8 kHz audible resonance
 const int BUZZER_PWM_RES     = 8;    // 8-bit resolution (0-255)
@@ -266,9 +274,14 @@ void setup() {
 #if HAS_ACTUATORS
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
-  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQ, BUZZER_PWM_RES);
-  ledcAttachPin(BUZZER_PIN, BUZZER_PWM_CHANNEL);
-  ledcWrite(BUZZER_PWM_CHANNEL, 0); // Buzzer silent initially
+  #if USE_ESP32_CORE_V3
+    ledcAttach(BUZZER_PIN, BUZZER_PWM_FREQ, BUZZER_PWM_RES);
+    ledcWrite(BUZZER_PIN, 0); // Buzzer silent initially
+  #else
+    ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQ, BUZZER_PWM_RES);
+    ledcAttachPin(BUZZER_PIN, BUZZER_PWM_CHANNEL);
+    ledcWrite(BUZZER_PWM_CHANNEL, 0); // Buzzer silent initially
+  #endif
 
   matrix.begin();
   matrix.setBrightness(40);
@@ -488,18 +501,31 @@ void setMatrixPattern(LedPattern pat) {
 }
 
 void setBuzzer(bool active, unsigned long durationMs) {
+#if HAS_ACTUATORS
   buzzerActive = active;
   if (active) {
-    ledcWrite(BUZZER_PWM_CHANNEL, 128); // 50% duty cycle 2.8 kHz tone
+    #if USE_ESP32_CORE_V3
+      ledcWrite(BUZZER_PIN, 128); // 50% duty cycle 2.8 kHz tone (ESP32 Core v3)
+    #else
+      ledcWrite(BUZZER_PWM_CHANNEL, 128); // 50% duty cycle 2.8 kHz tone (ESP32 Core v2)
+    #endif
     if (durationMs > 0) {
       buzzerAutoOffAt = millis() + durationMs;
     } else {
       buzzerAutoOffAt = 0; // Continuous until explicit clear
     }
   } else {
-    ledcWrite(BUZZER_PWM_CHANNEL, 0);   // Silence buzzer
+    #if USE_ESP32_CORE_V3
+      ledcWrite(BUZZER_PIN, 0);   // Silence buzzer (ESP32 Core v3)
+    #else
+      ledcWrite(BUZZER_PWM_CHANNEL, 0);   // Silence buzzer (ESP32 Core v2)
+    #endif
     buzzerAutoOffAt = 0;
   }
+#else
+  (void)active;
+  (void)durationMs;
+#endif
 }
 
 void updateActuatorAnimations() {
